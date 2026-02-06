@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Invoice, Winner, prizes } from '../App';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, RotateCcw, Sparkles, Trophy } from 'lucide-react';
+import { RotateCcw, Sparkles, Trophy } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface DrawMachineProps {
@@ -14,6 +14,12 @@ interface DrawMachineProps {
   totalWinners: number;
   resetAll: () => void;
 }
+
+/* ======================
+ * CẤU HÌNH FIX NGƯỜI TRÚNG
+ * ====================== */
+const FIXED_WINNER_TURN = 3;
+const FIXED_WINNER_INVOICE_ID = 'LB2665520290';
 
 export function DrawMachine({
   availableInvoices,
@@ -28,12 +34,18 @@ export function DrawMachine({
   const [displayedInvoice, setDisplayedInvoice] = useState<Invoice | null>(null);
   const [winner, setWinner] = useState<Winner | null>(null);
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const displayedInvoiceRef = useRef<Invoice | null>(null);
 
   const currentPrize = prizes[currentPrizeIndex];
-  const remainingDrawsForPrize = currentPrize ? currentPrize.count - currentDrawNumber : 0;
+  const remainingDrawsForPrize = currentPrize
+    ? currentPrize.count - currentDrawNumber
+    : 0;
 
+  /* ======================
+   * START DRAW
+   * ====================== */
   const startDraw = () => {
     if (availableInvoices.length === 0) {
       toast.error('Không còn hóa đơn nào để quay');
@@ -45,64 +57,85 @@ export function DrawMachine({
       return;
     }
 
-    // Capture current prize at the time of draw start
-    const prizeAtDrawStart = prizes[currentPrizeIndex];
+    const prizeAtStart = prizes[currentPrizeIndex];
     const drawNumberAtStart = currentDrawNumber;
 
     setIsDrawing(true);
-    let counter = 0;
-    const duration = 3000; // 3 seconds
-    const intervalTime = 50;
 
+    // 🎰 LUÔN NHẤP NHÁY RANDOM
     intervalRef.current = setInterval(() => {
-      const randomInvoice = availableInvoices[Math.floor(Math.random() * availableInvoices.length)];
-      setDisplayedInvoice(randomInvoice);
-      displayedInvoiceRef.current = randomInvoice;
-      counter += intervalTime;
+      const random =
+        availableInvoices[Math.floor(Math.random() * availableInvoices.length)];
 
-      if (counter >= duration) {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        finalizeDraw(prizeAtDrawStart, drawNumberAtStart);
+      setDisplayedInvoice(random);
+      displayedInvoiceRef.current = random;
+    }, 150);
+
+    setTimeout(() => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
-    }, intervalTime);
+      finalizeDraw(prizeAtStart, drawNumberAtStart);
+    }, 5000);
   };
 
-  const finalizeDraw = (prizeAtDrawStart: typeof prizes[0], drawNumberAtStart: number) => {
-    if (availableInvoices.length === 0 || !displayedInvoiceRef.current) return;
+  /* ======================
+   * FINALIZE DRAW (CHỐT KẾT QUẢ)
+   * ====================== */
+  const finalizeDraw = (
+    prizeAtStart: typeof prizes[0],
+    drawNumberAtStart: number
+  ) => {
+    const currentTurn = totalWinners + 1;
+
+    let finalInvoice: Invoice | null = displayedInvoiceRef.current;
+
+    // 🎯 NẾU ĐÚNG LƯỢT FIX → CHỐT NGƯỜI CHỈ ĐỊNH
+    if (currentTurn === FIXED_WINNER_TURN) {
+      const fixed = availableInvoices.find(
+        inv => inv.id === FIXED_WINNER_INVOICE_ID
+      );
+      if (fixed) {
+        finalInvoice = fixed;
+      }
+    }
+
+    if (!finalInvoice) return;
+
+    // 🔥 QUAN TRỌNG: SYNC UI KHUNG QUAY
+    setDisplayedInvoice(finalInvoice);
+    displayedInvoiceRef.current = finalInvoice;
 
     const newWinner: Winner = {
-      invoice: displayedInvoiceRef.current,
-      prize: prizeAtDrawStart.name,
-      prizeValue: prizeAtDrawStart.value,
+      invoice: finalInvoice,
+      prize: prizeAtStart.name,
+      prizeValue: prizeAtStart.value,
       timestamp: new Date(),
     };
 
+    setIsDrawing(false);
     setWinner(newWinner);
     addWinner(newWinner);
 
-    // Stop drawing immediately
-    setIsDrawing(false);
+    setTimeout(() => setShowWinnerDialog(true), 400);
 
-    // Show popup AFTER spin stops (after animation completes)
     setTimeout(() => {
-      setShowWinnerDialog(true);
-    }, 550);
-
-    // Delay state updates to prevent animation continuation
-    setTimeout(() => {
-      // Move to next draw
-      const nextDrawNumber = drawNumberAtStart + 1;
-      if (nextDrawNumber >= prizeAtDrawStart.count) {
-        setCurrentPrizeIndex(prev => prev + 1);
+      const next = drawNumberAtStart + 1;
+      if (next >= prizeAtStart.count) {
+        setCurrentPrizeIndex(p => p + 1);
         setCurrentDrawNumber(0);
       } else {
-        setCurrentDrawNumber(nextDrawNumber);
+        setCurrentDrawNumber(next);
       }
-    }, 600);
+    }, 500);
 
-    toast.success(`Đã quay trúng ${prizeAtDrawStart.name}!`);
+    toast.success(`Đã quay trúng ${prizeAtStart.name}!`);
   };
 
+  /* ======================
+   * RESET
+   * ====================== */
   const handleReset = () => {
     if (confirm('Bạn có chắc chắn muốn reset toàn bộ kết quả quay số?')) {
       resetAll();
@@ -120,10 +153,8 @@ export function DrawMachine({
     };
   }, []);
 
-  // Reset displayed invoice when user closes dialog
   useEffect(() => {
     if (!showWinnerDialog) {
-      // Delay reset slightly to avoid animation jank
       setTimeout(() => {
         setDisplayedInvoice(null);
         displayedInvoiceRef.current = null;
@@ -137,145 +168,101 @@ export function DrawMachine({
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className="bg-white/70 backdrop-blur-md">
           <CardContent className="pt-6">
-            <p className="text-sm text-gray-600">Tổng HĐ</p>
-            <p className="text-3xl font-bold text-gray-800">{totalInvoices}</p>
+            <p>Tổng HĐ</p>
+            <p className="text-3xl font-bold">{totalInvoices}</p>
           </CardContent>
         </Card>
-        <Card>
+
+        <Card className="bg-white/70 backdrop-blur-md">
           <CardContent className="pt-6">
-            <p className="text-sm text-gray-600">Đã Trúng</p>
+            <p>Đã Trúng</p>
             <p className="text-3xl font-bold text-green-600">{totalWinners}</p>
           </CardContent>
         </Card>
-        <Card>
+
+        <Card className="bg-white/70 backdrop-blur-md">
           <CardContent className="pt-6">
-            <p className="text-sm text-gray-600">Còn Lại</p>
-            <p className="text-3xl font-bold text-blue-600">{availableInvoices.length}</p>
+            <p>Còn Lại</p>
+            <p className="text-3xl font-bold text-blue-600">
+              {availableInvoices.length}
+            </p>
           </CardContent>
         </Card>
-        <Card>
+
+        <Card className="bg-white/70 backdrop-blur-md">
           <CardContent className="pt-6">
-            <p className="text-sm text-gray-600">Giải Còn Lại</p>
+            <p>Giải Còn Lại</p>
             <p className="text-3xl font-bold text-purple-600">
-              {prizes.reduce((sum, p, idx) => idx >= currentPrizeIndex ? sum + p.count : sum, 0) - currentDrawNumber}
+              {prizes.reduce((s, p, i) => (i >= currentPrizeIndex ? s + p.count : s), 0)
+                - currentDrawNumber}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Draw Machine */}
-      <Card className="overflow-hidden">
-        <CardHeader className={`bg-gradient-to-r ${currentPrize?.color || 'from-gray-400 to-gray-600'} text-white`}>
-          <CardTitle className="flex items-center justify-center gap-2 text-2xl">
-            <Trophy className="w-6 h-6" />
-            {allPrizesDrawn ? 'Đã Hoàn Thành' : currentPrize?.name || 'Hoàn Thành'}
-            <Trophy className="w-6 h-6" />
+      {/* Draw */}
+      <Card className="bg-transparent border-none shadow-none">
+        <CardHeader
+          className={`bg-gradient-to-r ${currentPrize?.color || 'from-gray-400 to-gray-600'}
+                      text-white rounded-xl`}
+        >
+          <CardTitle className="flex justify-center gap-2">
+            <Trophy /> {allPrizesDrawn ? 'Đã Hoàn Thành' : currentPrize?.name} <Trophy />
           </CardTitle>
           {!allPrizesDrawn && (
-            <CardDescription className="text-white/90 text-center">
-              Giải thưởng: {currentPrize?.value} • Còn {remainingDrawsForPrize} giải chưa quay
+            <CardDescription className="text-center text-white/90">
+              Giải thưởng: {currentPrize?.value} • Còn {remainingDrawsForPrize} giải
             </CardDescription>
           )}
         </CardHeader>
-        <CardContent className="pt-8 pb-8">
-          {/* Display Area */}
-          <div className="mb-8">
-            <div className="relative bg-gradient-to-br from-purple-100 to-pink-100 rounded-2xl p-8 min-h-64 flex items-center justify-center border-4 border-purple-300 overflow-hidden">
-              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjEiIGZpbGw9IiM5MzMzZWEiIG9wYWNpdHk9IjAuMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')] opacity-50"></div>
-              
-              <AnimatePresence mode="wait">
-                {displayedInvoice ? (
-                  <motion.div
-                    key={displayedInvoice.id}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    transition={{ duration: 0.1 }}
-                    className="text-center z-10"
-                  >
-                    <motion.div
-                      animate={isDrawing ? { rotateY: 360 } : { rotateY: 0 }}
-                      transition={isDrawing ? { duration: 0.8, repeat: Infinity, repeatType: 'loop', ease: 'linear' } : { duration: 0.5 }}
-                      style={{ perspective: '1000px' }}
-                      key={`${displayedInvoice.id}-${isDrawing}`}
-                    >
-                      <div className="bg-white rounded-2xl p-8 shadow-2xl border-4 border-yellow-400">
-                        <p className="text-sm text-gray-600 mb-2">Mã Hóa Đơn</p>
-                      <p className="text-5xl font-bold text-purple-600 mb-4">{displayedInvoice.id}</p>
-                      <p className="text-xl text-gray-800 font-semibold">{displayedInvoice.customerName}</p>
-                      <p className="text-sm text-gray-600 mt-2">{displayedInvoice.phone}</p>
-                      {displayedInvoice.amount > 0 && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          {displayedInvoice.amount.toLocaleString('vi-VN')}đ
-                        </p>
-                      )}
-                      </div>
-                    </motion.div>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-center z-10"
-                  >
-                    {allPrizesDrawn ? (
-                      <div>
-                        <Trophy className="w-24 h-24 text-yellow-500 mx-auto mb-4" />
-                        <p className="text-2xl font-bold text-gray-800">
-                          Đã hoàn thành tất cả các giải!
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <Sparkles className="w-24 h-24 text-purple-400 mx-auto mb-4" />
-                        <p className="text-2xl font-bold text-gray-600">
-                          Nhấn "Bắt Đầu Quay" để bắt đầu
-                        </p>
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+
+        <CardContent className="py-8 bg-transparent">
+          <div className="min-h-[250px] flex items-center justify-center bg-white/60 backdrop-blur-lg rounded-xl border-4 border-purple-300">
+            <AnimatePresence mode="wait">
+              {displayedInvoice ? (
+                <motion.div
+                  key={displayedInvoice.id}
+                  animate={isDrawing ? { opacity: [1, 0.4, 1] } : { opacity: 1 }}
+                  transition={
+                    isDrawing
+                      ? { duration: 0.4, repeat: Infinity, ease: 'easeInOut' }
+                      : { duration: 0.2 }
+                  }
+                >
+                  <div className="bg-white/80 backdrop-blur-md p-8 rounded-xl shadow-xl border-4 border-yellow-400 text-center">
+                    <p className="text-sm text-gray-600">Mã Hóa Đơn</p>
+                    <p className="text-5xl font-bold text-purple-600">
+                      {displayedInvoice.id}
+                    </p>
+                    <p className="text-xl font-semibold">
+                      {displayedInvoice.customerName}
+                    </p>
+                    <p className="text-base text-gray-500 mt-1">
+                      {displayedInvoice.phone?.slice(0, -4) + '****'}
+                    </p>
+                  </div>
+                </motion.div>
+              ) : (
+                <div className="text-center text-gray-500">
+                  <Sparkles className="w-16 h-16 mx-auto mb-4" />
+                  Nhấn “Bắt đầu quay”
+                </div>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* Controls */}
-          <div className="flex gap-4 justify-center">
-            <Button
-              onClick={startDraw}
-              disabled={isDrawing || availableInvoices.length === 0 || allPrizesDrawn}
-              size="lg"
-              className="text-xl font-bold px-12 py-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50"
-            >
-              {isDrawing ? (
-                <span className="flex items-center gap-2">
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                  >
-                    <Sparkles className="w-5 h-5" />
-                  </motion.div>
-                  ĐANG QUAY...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <Play className="w-5 h-5" />
-                  BẮT ĐẦU QUAY
-                </span>
-              )}
+          <div className="flex justify-center gap-4 mt-6">
+            <Button onClick={startDraw} disabled={isDrawing || allPrizesDrawn} size="lg">
+              {isDrawing ? 'ĐANG QUAY...' : 'BẮT ĐẦU QUAY'}
             </Button>
-
             <Button
               onClick={handleReset}
               disabled={isDrawing || totalWinners === 0}
-              size="lg"
               variant="outline"
-              className="text-lg font-semibold px-8 py-6"
             >
-              <RotateCcw className="w-5 h-5 mr-2" />
-              Reset
+              <RotateCcw className="w-5 h-5 mr-2" /> Reset
             </Button>
           </div>
         </CardContent>
@@ -283,31 +270,21 @@ export function DrawMachine({
 
       {/* Winner Dialog */}
       <Dialog open={showWinnerDialog} onOpenChange={setShowWinnerDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="bg-white/90 backdrop-blur-lg">
           <DialogHeader>
-            <DialogTitle className="text-center text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
-              🎉 CHÚC MỪNG! 🎉
+            <DialogTitle className="text-center text-3xl">
+              🎉 CHÚC MỪNG 🎉
             </DialogTitle>
           </DialogHeader>
-          <div className="text-center py-6 space-y-4">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', duration: 0.6 }}
-              className="text-8xl"
-            >
-              🏆
-            </motion.div>
-            <div className="space-y-2">
-              <p className="text-lg text-gray-600">Khách hàng có hóa đơn</p>
-              <p className="text-4xl font-bold text-purple-600">{winner?.invoice.id}</p>
-              <p className="text-xl font-semibold text-gray-800">{winner?.invoice.customerName}</p>
-            </div>
-            <div className="bg-gradient-to-r from-yellow-100 to-orange-100 rounded-xl p-4 border-2 border-yellow-400">
-              <p className="text-sm text-gray-600 mb-1">Đã trúng</p>
-              <p className="text-2xl font-bold text-orange-600">{winner?.prize}</p>
-              <p className="text-3xl font-bold text-green-600 mt-2">{winner?.prizeValue}</p>
-            </div>
+          <div className="text-center space-y-4">
+            <div className="text-6xl">🏆</div>
+            <p className="text-4xl font-bold text-purple-600">
+              {winner?.invoice.id}
+            </p>
+            <p className="text-xl">{winner?.invoice.customerName}</p>
+            <p className="text-2xl font-bold text-green-600">
+              {winner?.prizeValue}
+            </p>
           </div>
         </DialogContent>
       </Dialog>
