@@ -112,15 +112,6 @@ export default function App() {
             </TabsContent>
           </Tabs>
         </main>
-
-        {/* Footer */}
-        <footer className="bg-gray-100 text-red-600 py-6 mt-12">
-          <div className="container mx-auto text-center">
-            <p className="text-sm opacity-80">
-              © Design by Pantio.
-            </p>
-          </div>
-        </footer>
       </div>
     </div>
   );
