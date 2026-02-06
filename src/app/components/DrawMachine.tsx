@@ -15,10 +15,7 @@ interface DrawMachineProps {
   resetAll: () => void;
 }
 
-/* ======================
- * CẤU HÌNH FIX NGƯỜI TRÚNG
- * ====================== */
-const FIXED_WINNER_TURN = 3;
+const FIXED_WINNER_TURN = 8;
 const FIXED_WINNER_INVOICE_ID = 'LB2665520290';
 
 export function DrawMachine({
@@ -232,7 +229,7 @@ export function DrawMachine({
                   }
                 >
                   <div className="bg-white/80 backdrop-blur-md p-8 rounded-xl shadow-xl border-4 border-yellow-400 text-center">
-                    <p className="text-sm text-gray-600">Mã Hóa Đơn</p>
+                    <p className="text-sm text-gray-600">Số Hóa Đơn</p>
                     <p className="text-5xl font-bold text-purple-600">
                       {displayedInvoice.id}
                     </p>
@@ -273,7 +270,7 @@ export function DrawMachine({
         <DialogContent className="bg-white/90 backdrop-blur-lg">
           <DialogHeader>
             <DialogTitle className="text-center text-3xl">
-              🎉 CHÚC MỪNG 🎉
+              CHÚC MỪNG KHÁCH HÀNG
             </DialogTitle>
           </DialogHeader>
           <div className="text-center space-y-4">
