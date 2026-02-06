@@ -37,14 +37,14 @@ export function InvoiceInput({ invoices, addInvoice, setInvoices }: InvoiceInput
           const id = row['Mã HĐ'] || row['Ma HD'] || row['MaHD'] || row['ID'] || row['id'];
           const name = row['Tên Khách Hàng'] || row['Ten Khach Hang'] || row['TenKH'] || row['Name'] || row['name'];
           const phoneNum = row['SDT'] || row['SĐT'] || row['Phone'] || row['phone'] || row['Số điện thoại'];
-          const amt = row['Giá trị'] || row['Gia tri'] || row['Amount'] || row['amount'] || 0;
+          const region = row['Miền'] || row['Vùng'] || row['region'];
 
           if (id && name && phoneNum) {
             const newInvoice: Invoice = {
               id: String(id).trim(),
               customerName: String(name).trim(),
               phone: String(phoneNum).trim(),
-              amount: typeof amt === 'number' ? amt : parseFloat(String(amt).replace(/[^\d.]/g, '')) || 0,
+              region: region ? String(region).trim() : undefined,
             };
             addInvoice(newInvoice);
             successCount++;
@@ -173,6 +173,7 @@ export function InvoiceInput({ invoices, addInvoice, setInvoices }: InvoiceInput
                     <p className="font-semibold text-gray-800">{invoice.id}</p>
                     <p className="text-sm text-gray-600">{invoice.customerName}</p>
                     <p className="text-xs text-gray-500">{invoice.phone}</p>
+                    <p className="text-xs text-gray-500">{invoice.region}</p>
                   </div>
                   {invoice.amount > 0 && (
                     <p className="text-sm font-medium text-gray-700">

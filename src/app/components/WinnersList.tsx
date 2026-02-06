@@ -90,7 +90,9 @@ export function WinnersList({ winners }: WinnersListProps) {
                           <div className="text-right">
                             <p className="text-xl font-bold text-green-600">{winner.prizeValue}</p>
                             <p className="text-xs text-gray-500">
-                              {winner.invoice.amount.toLocaleString('vi-VN')}đ
+                              {typeof winner.invoice.amount === 'number'
+                                ? winner.invoice.amount.toLocaleString('vi-VN') + 'đ'
+                                : '-'}
                             </p>
                           </div>
                         </div>

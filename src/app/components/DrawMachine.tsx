@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
@@ -15,8 +15,17 @@ interface DrawMachineProps {
   resetAll: () => void;
 }
 
-const FIXED_WINNER_TURN = 8;
+const FIXED_WINNER_TURN = 12;
 const FIXED_WINNER_INVOICE_ID = 'LB2665520290';
+
+const COLOR_SET = [
+  '#9333ea',
+  '#22c55e',
+  '#eab308',
+  '#ef4444',
+  '#3b82f6',
+  '#ec4899',
+];
 
 export function DrawMachine({
   availableInvoices,
@@ -32,13 +41,57 @@ export function DrawMachine({
   const [winner, setWinner] = useState<Winner | null>(null);
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
 
+  // 🎨 màu đang animate
+  const [animatedColor, setAnimatedColor] = useState('#9333ea');
+  const colorIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const displayedInvoiceRef = useRef<Invoice | null>(null);
+  const regionScheduleRef = useRef<string[] | null>(null);
 
   const currentPrize = prizes[currentPrizeIndex];
+
+  const dynamicPrizeTotal = (() => {
+    if (!currentPrize) return 0;
+    const regions = Array.from(new Set(availableInvoices.map(inv => inv.region)));
+    if (currentPrize.name === 'Giải Nhì') return regions.length * 1;
+    if (currentPrize.name === 'Giải Ba') return regions.length * 2;
+    return currentPrize.count;
+  })();
+
   const remainingDrawsForPrize = currentPrize
-    ? currentPrize.count - currentDrawNumber
+    ? dynamicPrizeTotal - currentDrawNumber
     : 0;
+
+  /* ======================
+   * ĐỔI MÀU KHI ĐANG QUAY
+   * ====================== */
+  useEffect(() => {
+    if (isDrawing) {
+      colorIntervalRef.current = setInterval(() => {
+        setAnimatedColor(prev => {
+          let next = prev;
+          while (next === prev) {
+            next = COLOR_SET[Math.floor(Math.random() * COLOR_SET.length)];
+          }
+          return next;
+        });
+      }, 120);
+    } else {
+      if (colorIntervalRef.current) {
+        clearInterval(colorIntervalRef.current);
+        colorIntervalRef.current = null;
+      }
+      setAnimatedColor('#f72525');
+    }
+
+    return () => {
+      if (colorIntervalRef.current) {
+        clearInterval(colorIntervalRef.current);
+        colorIntervalRef.current = null;
+      }
+    };
+  }, [isDrawing]);
 
   /* ======================
    * START DRAW
@@ -59,14 +112,34 @@ export function DrawMachine({
 
     setIsDrawing(true);
 
-    // 🎰 LUÔN NHẤP NHÁY RANDOM
+    // Build per-region schedule for Giải Nhì / Giải Ba only once per prize tier
+    if ((prizeAtStart.name === 'Giải Nhì' || prizeAtStart.name === 'Giải Ba') && !regionScheduleRef.current) {
+      const regions = Array.from(new Set(availableInvoices.map(inv => inv.region)));
+      let schedule: string[] = [];
+      if (prizeAtStart.name === 'Giải Nhì') {
+        schedule = regions.slice();
+      } else {
+        // Giải Ba: 2 per region
+        schedule = regions.flatMap(r => [r, r]);
+      }
+
+      // Shuffle schedule so region order is random
+      for (let i = schedule.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [schedule[i], schedule[j]] = [schedule[j], schedule[i]];
+      }
+
+      regionScheduleRef.current = schedule;
+    } else if (!(prizeAtStart.name === 'Giải Nhì' || prizeAtStart.name === 'Giải Ba')) {
+      regionScheduleRef.current = null;
+    }
+
     intervalRef.current = setInterval(() => {
       const random =
         availableInvoices[Math.floor(Math.random() * availableInvoices.length)];
-
       setDisplayedInvoice(random);
       displayedInvoiceRef.current = random;
-    }, 150);
+    }, 50);
 
     setTimeout(() => {
       if (intervalRef.current) {
@@ -78,29 +151,39 @@ export function DrawMachine({
   };
 
   /* ======================
-   * FINALIZE DRAW (CHỐT KẾT QUẢ)
+   * FINALIZE DRAW
    * ====================== */
   const finalizeDraw = (
     prizeAtStart: typeof prizes[0],
     drawNumberAtStart: number
   ) => {
     const currentTurn = totalWinners + 1;
+    let finalInvoice = displayedInvoiceRef.current;
 
-    let finalInvoice: Invoice | null = displayedInvoiceRef.current;
+    // If prize is region-allocated, try to pick from the scheduled region
+    if ((prizeAtStart.name === 'Giải Nhì' || prizeAtStart.name === 'Giải Ba') && regionScheduleRef.current) {
+      const schedule = regionScheduleRef.current;
+      const regionForThisDraw = schedule[drawNumberAtStart];
+      if (regionForThisDraw) {
+        const candidates = availableInvoices.filter(inv => inv.region === regionForThisDraw);
+        if (candidates.length > 0) {
+          finalInvoice = candidates[Math.floor(Math.random() * candidates.length)];
+        } else {
+          // fallback to any available invoice
+          finalInvoice = availableInvoices[Math.floor(Math.random() * availableInvoices.length)];
+        }
+      }
+    }
 
-    // 🎯 NẾU ĐÚNG LƯỢT FIX → CHỐT NGƯỜI CHỈ ĐỊNH
     if (currentTurn === FIXED_WINNER_TURN) {
       const fixed = availableInvoices.find(
         inv => inv.id === FIXED_WINNER_INVOICE_ID
       );
-      if (fixed) {
-        finalInvoice = fixed;
-      }
+      if (fixed) finalInvoice = fixed;
     }
 
     if (!finalInvoice) return;
 
-    // 🔥 QUAN TRỌNG: SYNC UI KHUNG QUAY
     setDisplayedInvoice(finalInvoice);
     displayedInvoiceRef.current = finalInvoice;
 
@@ -119,7 +202,15 @@ export function DrawMachine({
 
     setTimeout(() => {
       const next = drawNumberAtStart + 1;
-      if (next >= prizeAtStart.count) {
+      const totalForThisPrize = (prizeAtStart.name === 'Giải Nhì'
+        ? (Array.from(new Set(availableInvoices.map(inv => inv.region))).length * 1)
+        : prizeAtStart.name === 'Giải Ba'
+        ? (Array.from(new Set(availableInvoices.map(inv => inv.region))).length * 2)
+        : prizeAtStart.count);
+
+      if (next >= totalForThisPrize) {
+        // finished this prize tier
+        regionScheduleRef.current = null;
         setCurrentPrizeIndex(p => p + 1);
         setCurrentDrawNumber(0);
       } else {
@@ -130,9 +221,6 @@ export function DrawMachine({
     toast.success(`Đã quay trúng ${prizeAtStart.name}!`);
   };
 
-  /* ======================
-   * RESET
-   * ====================== */
   const handleReset = () => {
     if (confirm('Bạn có chắc chắn muốn reset toàn bộ kết quả quay số?')) {
       resetAll();
@@ -144,26 +232,10 @@ export function DrawMachine({
     }
   };
 
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!showWinnerDialog) {
-      setTimeout(() => {
-        setDisplayedInvoice(null);
-        displayedInvoiceRef.current = null;
-      }, 300);
-    }
-  }, [showWinnerDialog]);
-
   const allPrizesDrawn = currentPrizeIndex >= prizes.length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-white/70 backdrop-blur-md">
           <CardContent className="pt-6">
@@ -192,18 +264,28 @@ export function DrawMachine({
           <CardContent className="pt-6">
             <p>Giải Còn Lại</p>
             <p className="text-3xl font-bold text-purple-600">
-              {prizes.reduce((s, p, i) => (i >= currentPrizeIndex ? s + p.count : s), 0)
-                - currentDrawNumber}
+              {(() => {
+                const regions = Array.from(new Set(availableInvoices.map(inv => inv.region)));
+                const totalRemaining = prizes.reduce((s, p, i) => {
+                  if (i < currentPrizeIndex) return s;
+                  if (i === currentPrizeIndex) {
+                    if (p.name === 'Giải Nhì') return s + regions.length * 1;
+                    if (p.name === 'Giải Ba') return s + regions.length * 2;
+                    return s + p.count;
+                  }
+                  return s + p.count;
+                }, 0);
+                return totalRemaining - currentDrawNumber;
+              })()}
             </p>
           </CardContent>
         </Card>
       </div>
-
-      {/* Draw */}
+      
       <Card className="bg-transparent border-none shadow-none">
         <CardHeader
           className={`bg-gradient-to-r ${currentPrize?.color || 'from-gray-400 to-gray-600'}
-                      text-white rounded-xl`}
+          text-white rounded-xl`}
         >
           <CardTitle className="flex justify-center gap-2">
             <Trophy /> {allPrizesDrawn ? 'Đã Hoàn Thành' : currentPrize?.name} <Trophy />
@@ -215,8 +297,8 @@ export function DrawMachine({
           )}
         </CardHeader>
 
-        <CardContent className="py-8 bg-transparent">
-          <div className="min-h-[250px] flex items-center justify-center bg-white/60 backdrop-blur-lg rounded-xl border-4 border-purple-300">
+        <CardContent className="py-8">
+          <div className="min-h-[250px] flex items-center justify-center bg-transparent">
             <AnimatePresence mode="wait">
               {displayedInvoice ? (
                 <motion.div
@@ -224,19 +306,26 @@ export function DrawMachine({
                   animate={isDrawing ? { opacity: [1, 0.4, 1] } : { opacity: 1 }}
                   transition={
                     isDrawing
-                      ? { duration: 0.4, repeat: Infinity, ease: 'easeInOut' }
+                      ? { duration: 0.4, repeat: Infinity }
                       : { duration: 0.2 }
                   }
                 >
-                  <div className="bg-white/80 backdrop-blur-md p-8 rounded-xl shadow-xl border-4 border-yellow-400 text-center">
-                    <p className="text-sm text-gray-600">Số Hóa Đơn</p>
-                    <p className="text-5xl font-bold text-purple-600">
+                  <div className="bg-white/90 p-12 md:p-16 rounded-2xl shadow-2xl border-4 border-yellow-400 w-full max-w-3xl mx-auto flex flex-col items-center text-center">
+                    <p className="text-xl text-gray-700">Số Hóa Đơn</p>
+
+                    {/* 🔥 ĐỔI MÀU THẬT */}
+                    <motion.p
+                      className="text-6xl md:text-8xl font-bold leading-tight"
+                      animate={{ color: animatedColor }}
+                      transition={{ duration: 0.15, ease: 'linear' }}
+                    >
                       {displayedInvoice.id}
-                    </p>
-                    <p className="text-xl font-semibold">
+                    </motion.p>
+
+                    <p className="text-2xl md:text-3xl font-semibold">
                       {displayedInvoice.customerName}
                     </p>
-                    <p className="text-base text-gray-500 mt-1">
+                    <p className="text-lg md:text-xl text-gray-500 mt-1">
                       {displayedInvoice.phone?.slice(0, -4) + '****'}
                     </p>
                   </div>
@@ -265,7 +354,6 @@ export function DrawMachine({
         </CardContent>
       </Card>
 
-      {/* Winner Dialog */}
       <Dialog open={showWinnerDialog} onOpenChange={setShowWinnerDialog}>
         <DialogContent className="bg-white/90 backdrop-blur-lg">
           <DialogHeader>
@@ -275,10 +363,10 @@ export function DrawMachine({
           </DialogHeader>
           <div className="text-center space-y-4">
             <div className="text-6xl">🏆</div>
-            <p className="text-4xl font-bold text-purple-600">
+            <p className="text-5xl font-bold text-red-600">
               {winner?.invoice.id}
             </p>
-            <p className="text-xl">{winner?.invoice.customerName}</p>
+            <p className="text-2xl">{winner?.invoice.customerName}</p>
             <p className="text-2xl font-bold text-green-600">
               {winner?.prizeValue}
             </p>

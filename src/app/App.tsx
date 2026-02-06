@@ -10,7 +10,7 @@ export interface Invoice {
   id: string;
   customerName: string;
   phone: string;
-  amount: number;
+  region: string;
 }
 
 export interface Winner {
@@ -29,7 +29,7 @@ export interface Prize {
 
 export const prizes: Prize[] = [
   { name: 'Giải Nhất', value: '5.000.000đ', count: 1, color: 'from-yellow-400 to-yellow-600' },
-  { name: 'Giải Nhì', value: '3.000.000đ', count: 3, color: 'from-gray-300 to-gray-400' },
+  { name: 'Giải Nhì', value: '3.000.000đ', count: 3, color: 'from-red-300 to-red-400' },
   { name: 'Giải Ba', value: '2.000.000đ', count: 6, color: 'from-orange-400 to-orange-600' },
   { name: 'Giải Khuyến Khích', value: '1.000.000đ', count: 10, color: 'from-blue-400 to-blue-600' },
 ];
