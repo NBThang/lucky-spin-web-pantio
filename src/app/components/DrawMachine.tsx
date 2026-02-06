@@ -29,6 +29,7 @@ export function DrawMachine({
   const [winner, setWinner] = useState<Winner | null>(null);
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const displayedInvoiceRef = useRef<Invoice | null>(null);
 
   const currentPrize = prizes[currentPrizeIndex];
   const remainingDrawsForPrize = currentPrize ? currentPrize.count - currentDrawNumber : 0;
@@ -44,6 +45,10 @@ export function DrawMachine({
       return;
     }
 
+    // Capture current prize at the time of draw start
+    const prizeAtDrawStart = prizes[currentPrizeIndex];
+    const drawNumberAtStart = currentDrawNumber;
+
     setIsDrawing(true);
     let counter = 0;
     const duration = 3000; // 3 seconds
@@ -52,43 +57,50 @@ export function DrawMachine({
     intervalRef.current = setInterval(() => {
       const randomInvoice = availableInvoices[Math.floor(Math.random() * availableInvoices.length)];
       setDisplayedInvoice(randomInvoice);
+      displayedInvoiceRef.current = randomInvoice;
       counter += intervalTime;
 
       if (counter >= duration) {
         if (intervalRef.current) clearInterval(intervalRef.current);
-        finalizeDraw();
+        finalizeDraw(prizeAtDrawStart, drawNumberAtStart);
       }
     }, intervalTime);
   };
 
-  const finalizeDraw = () => {
-    setIsDrawing(false);
-    
-    if (availableInvoices.length === 0) return;
+  const finalizeDraw = (prizeAtDrawStart: typeof prizes[0], drawNumberAtStart: number) => {
+    if (availableInvoices.length === 0 || !displayedInvoiceRef.current) return;
 
-    const winningInvoice = availableInvoices[Math.floor(Math.random() * availableInvoices.length)];
-    
     const newWinner: Winner = {
-      invoice: winningInvoice,
-      prize: currentPrize.name,
-      prizeValue: currentPrize.value,
+      invoice: displayedInvoiceRef.current,
+      prize: prizeAtDrawStart.name,
+      prizeValue: prizeAtDrawStart.value,
       timestamp: new Date(),
     };
 
     setWinner(newWinner);
-    setShowWinnerDialog(true);
     addWinner(newWinner);
 
-    // Move to next draw
-    const nextDrawNumber = currentDrawNumber + 1;
-    if (nextDrawNumber >= currentPrize.count) {
-      setCurrentPrizeIndex(currentPrizeIndex + 1);
-      setCurrentDrawNumber(0);
-    } else {
-      setCurrentDrawNumber(nextDrawNumber);
-    }
+    // Stop drawing immediately
+    setIsDrawing(false);
 
-    toast.success(`Đã quay trúng ${currentPrize.name}!`);
+    // Show popup AFTER spin stops (after animation completes)
+    setTimeout(() => {
+      setShowWinnerDialog(true);
+    }, 550);
+
+    // Delay state updates to prevent animation continuation
+    setTimeout(() => {
+      // Move to next draw
+      const nextDrawNumber = drawNumberAtStart + 1;
+      if (nextDrawNumber >= prizeAtDrawStart.count) {
+        setCurrentPrizeIndex(prev => prev + 1);
+        setCurrentDrawNumber(0);
+      } else {
+        setCurrentDrawNumber(nextDrawNumber);
+      }
+    }, 600);
+
+    toast.success(`Đã quay trúng ${prizeAtDrawStart.name}!`);
   };
 
   const handleReset = () => {
@@ -97,6 +109,7 @@ export function DrawMachine({
       setCurrentPrizeIndex(0);
       setCurrentDrawNumber(0);
       setDisplayedInvoice(null);
+      displayedInvoiceRef.current = null;
       toast.success('Đã reset kết quả');
     }
   };
@@ -106,6 +119,17 @@ export function DrawMachine({
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
+
+  // Reset displayed invoice when user closes dialog
+  useEffect(() => {
+    if (!showWinnerDialog) {
+      // Delay reset slightly to avoid animation jank
+      setTimeout(() => {
+        setDisplayedInvoice(null);
+        displayedInvoiceRef.current = null;
+      }, 300);
+    }
+  }, [showWinnerDialog]);
 
   const allPrizesDrawn = currentPrizeIndex >= prizes.length;
 
@@ -165,14 +189,20 @@ export function DrawMachine({
                 {displayedInvoice ? (
                   <motion.div
                     key={displayedInvoice.id}
-                    initial={{ opacity: 0, scale: 0.8, rotateX: -90 }}
-                    animate={{ opacity: 1, scale: 1, rotateX: 0 }}
-                    exit={{ opacity: 0, scale: 0.8, rotateX: 90 }}
-                    transition={{ duration: 0.2 }}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.1 }}
                     className="text-center z-10"
                   >
-                    <div className="bg-white rounded-2xl p-8 shadow-2xl border-4 border-yellow-400">
-                      <p className="text-sm text-gray-600 mb-2">Mã Hóa Đơn</p>
+                    <motion.div
+                      animate={isDrawing ? { rotateY: 360 } : { rotateY: 0 }}
+                      transition={isDrawing ? { duration: 0.8, repeat: Infinity, repeatType: 'loop', ease: 'linear' } : { duration: 0.5 }}
+                      style={{ perspective: '1000px' }}
+                      key={`${displayedInvoice.id}-${isDrawing}`}
+                    >
+                      <div className="bg-white rounded-2xl p-8 shadow-2xl border-4 border-yellow-400">
+                        <p className="text-sm text-gray-600 mb-2">Mã Hóa Đơn</p>
                       <p className="text-5xl font-bold text-purple-600 mb-4">{displayedInvoice.id}</p>
                       <p className="text-xl text-gray-800 font-semibold">{displayedInvoice.customerName}</p>
                       <p className="text-sm text-gray-600 mt-2">{displayedInvoice.phone}</p>
@@ -181,7 +211,8 @@ export function DrawMachine({
                           {displayedInvoice.amount.toLocaleString('vi-VN')}đ
                         </p>
                       )}
-                    </div>
+                      </div>
+                    </motion.div>
                   </motion.div>
                 ) : (
                   <motion.div
@@ -268,7 +299,7 @@ export function DrawMachine({
               🏆
             </motion.div>
             <div className="space-y-2">
-              <p className="text-lg text-gray-600">Hóa đơn</p>
+              <p className="text-lg text-gray-600">Khách hàng có hóa đơn</p>
               <p className="text-4xl font-bold text-purple-600">{winner?.invoice.id}</p>
               <p className="text-xl font-semibold text-gray-800">{winner?.invoice.customerName}</p>
             </div>
