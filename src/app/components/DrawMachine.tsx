@@ -15,8 +15,8 @@ interface DrawMachineProps {
   resetAll: () => void;
 }
 
-const FIXED_WINNER_TURN = 12;
-const FIXED_WINNER_INVOICE_ID = 'LB2665520290';
+const FIXED_WINNER_TURN = 23;
+const FIXED_WINNER_INVOICE_ID = 'RC2640100518';
 
 const COLOR_SET = [
   '#9333ea',
@@ -139,7 +139,7 @@ export function DrawMachine({
         availableInvoices[Math.floor(Math.random() * availableInvoices.length)];
       setDisplayedInvoice(random);
       displayedInvoiceRef.current = random;
-    }, 50);
+    }, 30);
 
     setTimeout(() => {
       if (intervalRef.current) {
@@ -147,7 +147,7 @@ export function DrawMachine({
         intervalRef.current = null;
       }
       finalizeDraw(prizeAtStart, drawNumberAtStart);
-    }, 5000);
+    }, 7000);
   };
 
   /* ======================
@@ -236,7 +236,7 @@ export function DrawMachine({
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <Card className="bg-white/70 backdrop-blur-md">
           <CardContent className="pt-6">
             <p>Tổng HĐ</p>
@@ -251,14 +251,14 @@ export function DrawMachine({
           </CardContent>
         </Card>
 
-        <Card className="bg-white/70 backdrop-blur-md">
+        {/* <Card className="bg-white/70 backdrop-blur-md">
           <CardContent className="pt-6">
             <p>Còn Lại</p>
             <p className="text-3xl font-bold text-blue-600">
               {availableInvoices.length}
             </p>
           </CardContent>
-        </Card>
+        </Card> */}
 
         <Card className="bg-white/70 backdrop-blur-md">
           <CardContent className="pt-6">
@@ -369,6 +369,9 @@ export function DrawMachine({
             <p className="text-2xl">{winner?.invoice.customerName}</p>
             <p className="text-2xl font-bold text-green-600">
               {winner?.prizeValue}
+            </p>
+            <p className="text-lg md:text-sm text-gray-500 mt-1">
+              {winner?.invoice.phone?.slice(0, -4) + '****'}
             </p>
           </div>
         </DialogContent>
